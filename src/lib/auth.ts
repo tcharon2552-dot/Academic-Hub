@@ -1,11 +1,11 @@
 import { cookies } from "next/headers";
-import { OwnerType, PlanCode, SubscriptionStatus, type Prisma, type User } from "@prisma/client";
+import { OwnerType, PlanCode, SubscriptionStatus, UserRole, type Prisma, type User } from "@prisma/client";
 import { db } from "./db";
 import { grantSignupCredits, type QuotaClient } from "./quota";
 
 export const SESSION_COOKIE_NAME = "academic_hub_session";
 
-type RegisteredUser = Pick<User, "id" | "email" | "name">;
+type RegisteredUser = Pick<User, "id" | "email" | "name" | "role">;
 
 type UserUpsertArgs = {
   where: {
@@ -213,4 +213,14 @@ export async function getCurrentSubscription(
       }
     }
   });
+}
+
+export async function requireAdminUser(options: { client?: AuthClient; sessionToken?: string } = {}) {
+  const user = await getCurrentUser(options);
+
+  if (!user || user.role !== UserRole.ADMIN) {
+    throw new AuthError("Admin access required.");
+  }
+
+  return user;
 }

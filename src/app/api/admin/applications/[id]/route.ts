@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { ApplicationError, reviewTeamApplication, type ReviewAction } from "@/lib/applications";
+import { AuthError, requireAdminUser } from "@/lib/auth";
 
 const reviewActions = new Set<ReviewAction>(["approve", "reject", "mark_contacted"]);
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
+    await requireAdminUser();
     const { id } = await params;
     const body = (await request.json()) as {
       action?: unknown;
@@ -24,6 +26,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       application
     });
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    }
+
     const message =
       error instanceof ApplicationError || error instanceof Error ? error.message : "Application review failed.";
     return NextResponse.json({ error: message }, { status: 400 });

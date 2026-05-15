@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { OwnerType, PlanCode, Prisma, SubscriptionStatus, WorkflowRunStatus, WorkflowType } from "@prisma/client";
+import {
+  OwnerType,
+  PlanCode,
+  Prisma,
+  SubscriptionStatus,
+  UserRole,
+  WorkflowRunStatus,
+  WorkflowType
+} from "@prisma/client";
 import { consumeQuota, getQuotaBalance, grantAddOnQuota, QUOTA_TYPES, type QuotaClient } from "../../src/lib/quota";
 import { registerUser, type AuthClient } from "../../src/lib/auth";
 import { runLiteratureReviewWorkflow } from "../../src/lib/workflows/literature-review";
@@ -11,6 +19,7 @@ type UserRow = {
   id: string;
   email: string;
   name: string | null;
+  role: UserRole;
 };
 
 type SubscriptionRow = {
@@ -126,7 +135,8 @@ function createAuthClient(rows: { users: UserRow[]; subscriptions: SubscriptionR
         const user = {
           id: `user-${rows.users.length + 1}`,
           email: create.email,
-          name: create.name ?? null
+          name: create.name ?? null,
+          role: UserRole.USER
         };
         rows.users.push(user);
         return user;
