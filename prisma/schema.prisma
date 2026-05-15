@@ -301,10 +301,14 @@ model TeamApplication {
   requesterUserId   String
   teamId            String?
   desiredPlanCode   PlanCode
+  applicantName     String
+  institution       String
   labName           String
   contactEmail      String
   memberCount       Int
   useCase           String
+  invoiceRequired   Boolean           @default(false)
+  contractRequired  Boolean           @default(false)
   paymentPreference PaymentMethod?
   status            ApplicationStatus @default(PENDING)
   reviewerNote      String?
