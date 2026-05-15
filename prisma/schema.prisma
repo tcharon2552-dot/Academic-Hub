@@ -154,16 +154,17 @@ model Subscription {
 }
 
 model QuotaLedger {
-  id           String         @id @default(cuid())
-  ownerType    OwnerType
-  ownerId      String
-  eventType    QuotaEventType
-  quotaType    String
-  amount       Int
-  balanceAfter Int?
-  expiresAt    DateTime?
-  metadata     Json?
-  createdAt    DateTime       @default(now())
+  id             String         @id @default(cuid())
+  ownerType      OwnerType
+  ownerId        String
+  eventType      QuotaEventType
+  quotaType      String
+  amount         Int
+  balanceAfter   Int?
+  expiresAt      DateTime?
+  idempotencyKey String?        @unique
+  metadata       Json?
+  createdAt      DateTime       @default(now())
 
   @@index([ownerType, ownerId, quotaType])
 }

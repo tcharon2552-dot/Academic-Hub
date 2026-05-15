@@ -23,6 +23,16 @@ type LedgerWhere = {
   ownerType: OwnerType;
   ownerId: string;
   quotaType: QuotaType;
+  OR?: Array<
+    | {
+        expiresAt: null;
+      }
+    | {
+        expiresAt: {
+          gt: Date;
+        };
+      }
+  >;
 };
 
 type LedgerCreateInput = LedgerWhere & {
@@ -30,7 +40,12 @@ type LedgerCreateInput = LedgerWhere & {
   amount: number;
   balanceAfter?: number | null;
   expiresAt?: Date | null;
+  idempotencyKey?: string | null;
   metadata?: Prisma.InputJsonValue;
+};
+
+type TransactionOptions = {
+  isolationLevel?: Prisma.TransactionIsolationLevel;
 };
 
 export type QuotaClient = {
@@ -46,8 +61,9 @@ export type QuotaClient = {
       };
     }>;
     create(args: { data: LedgerCreateInput }): Promise<unknown>;
+    createMany(args: { data: LedgerCreateInput[]; skipDuplicates?: boolean }): Promise<{ count: number }>;
   };
-  $transaction<T>(callback: (tx: QuotaClient) => Promise<T>): Promise<T>;
+  $transaction<T>(callback: (tx: QuotaClient) => Promise<T>, options?: TransactionOptions): Promise<T>;
 };
 
 type QuotaOptions = {
@@ -58,9 +74,10 @@ type QuotaOptions = {
 const prismaQuotaClient: QuotaClient = {
   quotaLedger: {
     aggregate: (args) => db.quotaLedger.aggregate(args),
-    create: (args) => db.quotaLedger.create(args)
+    create: (args) => db.quotaLedger.create(args),
+    createMany: (args) => db.quotaLedger.createMany(args)
   },
-  $transaction: (callback) => db.$transaction((tx) => callback(tx as unknown as QuotaClient))
+  $transaction: (callback, options) => db.$transaction((tx) => callback(tx as unknown as QuotaClient), options)
 };
 
 export class QuotaError extends Error {
@@ -76,11 +93,22 @@ async function getBalance(
   quotaType: QuotaType,
   ownerType: OwnerType
 ) {
+  const now = new Date();
   const result = await client.quotaLedger.aggregate({
     where: {
       ownerType,
       ownerId,
-      quotaType
+      quotaType,
+      OR: [
+        {
+          expiresAt: null
+        },
+        {
+          expiresAt: {
+            gt: now
+          }
+        }
+      ]
     },
     _sum: {
       amount: true
@@ -96,6 +124,32 @@ export async function getQuotaBalance(
   options: QuotaOptions = {}
 ) {
   return getBalance(options.client ?? prismaQuotaClient, ownerId, quotaType, options.ownerType ?? "USER");
+}
+
+function isPrismaError(error: unknown, code: string) {
+  return error instanceof Prisma.PrismaClientKnownRequestError
+    ? error.code === code
+    : typeof error === "object" && error !== null && "code" in error && error.code === code;
+}
+
+async function withSerializableRetry<T>(client: QuotaClient, callback: (tx: QuotaClient) => Promise<T>) {
+  const maxAttempts = 3;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await client.$transaction(callback, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable
+      });
+    } catch (error) {
+      if (isPrismaError(error, "P2034") && attempt < maxAttempts) {
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  throw new QuotaError("Quota transaction retry limit exceeded.");
 }
 
 export async function grantSignupCredits(ownerId: string, options: QuotaOptions = {}) {
@@ -114,24 +168,31 @@ export async function grantSignupCredits(ownerId: string, options: QuotaOptions 
     [QUOTA_TYPES.advancedModel, signupPlan.quotaDefaults.advancedModelCredits]
   ] as const;
 
-  await client.$transaction(async (tx) => {
+  await withSerializableRetry(client, async (tx) => {
+    const data: LedgerCreateInput[] = [];
+
     for (const [quotaType, amount] of entries) {
       if (amount <= 0) {
         continue;
       }
 
       const currentBalance = await getBalance(tx, ownerId, quotaType, ownerType);
-      const balanceAfter = currentBalance + amount;
 
-      await tx.quotaLedger.create({
-        data: {
-          ownerType,
-          ownerId,
-          eventType: "SIGNUP_GRANT",
-          quotaType,
-          amount,
-          balanceAfter
-        }
+      data.push({
+        ownerType,
+        ownerId,
+        eventType: "SIGNUP_GRANT",
+        quotaType,
+        amount,
+        balanceAfter: currentBalance + amount,
+        idempotencyKey: `signup:${ownerType}:${ownerId}:${quotaType}`
+      });
+    }
+
+    if (data.length > 0) {
+      await tx.quotaLedger.createMany({
+        data,
+        skipDuplicates: true
       });
     }
   });
@@ -151,7 +212,7 @@ export async function consumeQuota(
   const client = options.client ?? prismaQuotaClient;
   const ownerType = options.ownerType ?? "USER";
 
-  await client.$transaction(async (tx) => {
+  await withSerializableRetry(client, async (tx) => {
     const currentBalance = await getBalance(tx, ownerId, quotaType, ownerType);
 
     if (currentBalance < amount) {
