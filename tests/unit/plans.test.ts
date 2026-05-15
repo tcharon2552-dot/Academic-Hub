@@ -45,4 +45,28 @@ describe("PLAN_CATALOG", () => {
   it("does not mark any tier as unlimited", () => {
     expect(PLAN_CATALOG.every((plan) => plan.isUnlimited === false)).toBe(true);
   });
+
+  it("keeps seed-safe pricing and quota defaults in the catalog", () => {
+    const plan = getPlanByCode("B2");
+
+    expect(plan.pricing).toEqual({
+      currency: "RMB",
+      monthlyPriceMin: 1299,
+      monthlyPriceMax: 2999,
+      billingPeriod: "month"
+    });
+    expect(plan.quotaDefaults).toMatchObject({
+      researchTaskCredits: expect.any(Number),
+      paperReadingCredits: expect.any(Number),
+      longDocumentCredits: expect.any(Number),
+      advancedModelCredits: expect.any(Number)
+    });
+  });
+
+  it("returns an immutable public catalog copy", () => {
+    const plans = PLAN_CATALOG;
+
+    expect(Object.isFrozen(plans)).toBe(true);
+    expect(Object.isFrozen(getPlanByCode("A2"))).toBe(true);
+  });
 });
