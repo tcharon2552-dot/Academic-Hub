@@ -1,0 +1,316 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PlanCode {
+  A0
+  A1
+  A2
+  A3
+  B1
+  B2
+  B3
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+}
+
+enum QuotaEventType {
+  SIGNUP_GRANT
+  PLAN_GRANT
+  CONSUMPTION
+  ADD_ON_GRANT
+  ADJUSTMENT
+  EXPIRATION
+}
+
+enum WorkflowType {
+  PAPER_READER
+  WRITING_POLISH
+  LITERATURE_REVIEW
+  CODE_DATA_ANALYSIS
+  REVIEW_RESPONSE
+  GRANT_PROPOSAL
+}
+
+enum PaymentMethod {
+  WECHAT_PAY
+  ALIPAY
+  BANK_TRANSFER
+  MANUAL
+  CRYPTO_USDT
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELED
+  REFUNDED
+  UNDER_REVIEW
+}
+
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  NEEDS_INFO
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum TeamMemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum DocumentStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum WorkflowRunStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+model User {
+  id               String            @id @default(cuid())
+  email            String            @unique
+  name             String?
+  role             UserRole          @default(USER)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  subscriptions    Subscription[]
+  teamMemberships  TeamMember[]
+  ownedTeams       Team[]            @relation("TeamOwner")
+  documents        Document[]
+  workflowRuns     WorkflowRun[]
+  usageRecords     UsageRecord[]
+  paymentOrders    PaymentOrder[]
+  quotaLedgers     QuotaLedger[]
+  teamApplications TeamApplication[]
+}
+
+model Plan {
+  code            PlanCode          @id
+  name            String
+  audience        String
+  accessMode      String
+  priceLabel      String
+  currency        String
+  monthlyPriceMin Int
+  monthlyPriceMax Int?
+  billingPeriod   String
+  signupCredits   Int               @default(0)
+  monthlyCredits  Int               @default(0)
+  quotaDefaults   Json
+  seatLabel       String
+  summary         String
+  features        Json
+  isUnlimited     Boolean           @default(false)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  subscriptions   Subscription[]
+  paymentOrders   PaymentOrder[]
+  applications    TeamApplication[]
+}
+
+model Subscription {
+  id                 String             @id @default(cuid())
+  userId             String?
+  teamId             String?
+  planCode           PlanCode
+  status             SubscriptionStatus @default(ACTIVE)
+  currentPeriodStart DateTime           @default(now())
+  currentPeriodEnd   DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  user               User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team               Team?              @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  plan               Plan               @relation(fields: [planCode], references: [code])
+
+  @@index([userId])
+  @@index([teamId])
+  @@index([planCode])
+}
+
+model QuotaLedger {
+  id           String         @id @default(cuid())
+  ownerUserId  String?
+  ownerTeamId  String?
+  eventType    QuotaEventType
+  quotaType    String
+  amount       Int
+  balanceAfter Int?
+  expiresAt    DateTime?
+  metadata     Json?
+  createdAt    DateTime       @default(now())
+  ownerUser    User?          @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  ownerTeam    Team?          @relation(fields: [ownerTeamId], references: [id], onDelete: Cascade)
+
+  @@index([ownerUserId, quotaType])
+  @@index([ownerTeamId, quotaType])
+}
+
+model Team {
+  id            String            @id @default(cuid())
+  name          String
+  ownerUserId   String
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  owner         User              @relation("TeamOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  members       TeamMember[]
+  subscriptions Subscription[]
+  documents     Document[]
+  workflowRuns  WorkflowRun[]
+  usageRecords  UsageRecord[]
+  paymentOrders PaymentOrder[]
+  quotaLedgers  QuotaLedger[]
+  applications  TeamApplication[]
+
+  @@index([ownerUserId])
+}
+
+model TeamMember {
+  id        String         @id @default(cuid())
+  teamId    String
+  userId    String
+  role      TeamMemberRole @default(MEMBER)
+  createdAt DateTime       @default(now())
+  team      Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([userId])
+}
+
+model Document {
+  id               String         @id @default(cuid())
+  ownerUserId      String?
+  teamId           String?
+  filename         String
+  mimeType         String
+  sizeBytes        Int
+  storageKey       String?
+  extractedText    String?
+  extractionStatus DocumentStatus @default(PENDING)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  ownerUser        User?          @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  team             Team?          @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  workflowRuns     WorkflowRun[]
+
+  @@index([ownerUserId])
+  @@index([teamId])
+}
+
+model WorkflowRun {
+  id            String            @id @default(cuid())
+  type          WorkflowType
+  status        WorkflowRunStatus @default(PENDING)
+  userId        String
+  teamId        String?
+  documentId    String?
+  inputSummary  String
+  outputSummary String?
+  metadata      Json?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team          Team?             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  document      Document?         @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  usageRecords  UsageRecord[]
+
+  @@index([userId])
+  @@index([teamId])
+  @@index([type])
+}
+
+model UsageRecord {
+  id               String       @id @default(cuid())
+  workflowRunId    String?
+  userId           String?
+  teamId           String?
+  provider         String
+  model            String
+  promptTokens     Int          @default(0)
+  completionTokens Int          @default(0)
+  totalTokens      Int          @default(0)
+  costCents        Int?
+  rawUsage         Json?
+  createdAt        DateTime     @default(now())
+  workflowRun      WorkflowRun? @relation(fields: [workflowRunId], references: [id], onDelete: SetNull)
+  user             User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team             Team?        @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([workflowRunId])
+  @@index([userId])
+  @@index([teamId])
+}
+
+model PaymentOrder {
+  id              String        @id @default(cuid())
+  userId          String?
+  teamId          String?
+  planCode        PlanCode?
+  method          PaymentMethod
+  status          PaymentStatus @default(PENDING)
+  amountCents     Int
+  currency        String        @default("RMB")
+  paymentProvider String?
+  providerOrderId String?
+  metadata        Json?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  user            User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team            Team?         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  plan            Plan?         @relation(fields: [planCode], references: [code])
+
+  @@index([userId])
+  @@index([teamId])
+  @@index([planCode])
+  @@index([status])
+}
+
+model TeamApplication {
+  id                String            @id @default(cuid())
+  requesterUserId   String
+  teamId            String?
+  desiredPlanCode   PlanCode
+  labName           String
+  contactEmail      String
+  memberCount       Int
+  useCase           String
+  paymentPreference PaymentMethod?
+  status            ApplicationStatus @default(PENDING)
+  reviewerNote      String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  requester         User              @relation(fields: [requesterUserId], references: [id], onDelete: Cascade)
+  team              Team?             @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  desiredPlan       Plan              @relation(fields: [desiredPlanCode], references: [code])
+
+  @@index([requesterUserId])
+  @@index([teamId])
+  @@index([desiredPlanCode])
+  @@index([status])
+}
