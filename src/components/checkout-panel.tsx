@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 type CheckoutPanelProps = {
   planCode: PlanCode;
   priceLabel: string;
+  cryptoEnabled?: boolean;
 };
 
 type CheckoutResponse = {
@@ -19,12 +20,38 @@ type CheckoutResponse = {
   error?: string;
 };
 
-export function CheckoutPanel({ planCode, priceLabel }: CheckoutPanelProps) {
+const domesticPaymentOptions = [
+  {
+    method: PaymentMethod.ALIPAY,
+    label: "Alipay",
+    description: "Create a domestic Alipay order for manual provider confirmation."
+  },
+  {
+    method: PaymentMethod.WECHAT_PAY,
+    label: "WeChat Pay",
+    description: "Create a domestic WeChat Pay order for manual provider confirmation."
+  },
+  {
+    method: PaymentMethod.BANK_TRANSFER,
+    label: "Bank transfer",
+    description: "Create a bank transfer order that stays under finance review."
+  }
+] as const;
+
+const cryptoPaymentOption = {
+  method: PaymentMethod.CRYPTO_USDT,
+  label: "USDT",
+  description: "Create a USDT order for compliance and payment operations review."
+} as const;
+
+export function CheckoutPanel({ planCode, priceLabel, cryptoEnabled = false }: CheckoutPanelProps) {
   const [isReady, setIsReady] = useState(false);
+  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>(PaymentMethod.ALIPAY);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createdOrder, setCreatedOrder] = useState<CheckoutResponse["order"] | null>(null);
+  const paymentOptions = cryptoEnabled ? [...domesticPaymentOptions, cryptoPaymentOption] : domesticPaymentOptions;
 
   useEffect(() => {
     setIsReady(true);
@@ -39,6 +66,29 @@ export function CheckoutPanel({ planCode, priceLabel }: CheckoutPanelProps) {
         This creates a self-serve payment order. Provider confirmation and subscription activation are handled by the
         payment operations layer.
       </p>
+      <fieldset className="mt-5 grid gap-3">
+        <legend className="text-sm font-semibold text-ink">Payment method</legend>
+        {paymentOptions.map((option) => (
+          <label
+            key={option.method}
+            className="flex cursor-pointer items-start gap-3 rounded-md border border-line bg-paper px-3 py-3 text-sm transition has-[:checked]:border-moss has-[:checked]:bg-white"
+          >
+            <input
+              type="radio"
+              name="paymentMethod"
+              value={option.method}
+              checked={selectedMethod === option.method}
+              disabled={!isReady || isSubmitting}
+              onChange={() => setSelectedMethod(option.method)}
+              className="mt-1 h-4 w-4"
+            />
+            <span>
+              <span className="block font-semibold text-ink">{option.label}</span>
+              <span className="mt-1 block leading-5 text-ink/65">{option.description}</span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
       <button
         type="button"
         disabled={!isReady || isSubmitting}
@@ -56,7 +106,7 @@ export function CheckoutPanel({ planCode, priceLabel }: CheckoutPanelProps) {
             },
             body: JSON.stringify({
               planCode,
-              method: PaymentMethod.ALIPAY
+              method: selectedMethod
             })
           });
           const body = (await response.json().catch(() => null)) as CheckoutResponse | null;
@@ -75,7 +125,7 @@ export function CheckoutPanel({ planCode, priceLabel }: CheckoutPanelProps) {
           }
         }}
       >
-        {isSubmitting ? "Creating order" : "Create Alipay order"}
+        {isSubmitting ? "Creating order" : "Create payment order"}
       </button>
       {message ? <p className="mt-4 rounded-md bg-paper px-3 py-2 text-sm font-medium text-ink">{message}</p> : null}
       {error ? <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</p> : null}

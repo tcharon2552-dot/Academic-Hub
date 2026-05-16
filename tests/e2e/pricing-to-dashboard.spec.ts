@@ -70,15 +70,18 @@ test("registered user can create a self-serve A2 payment order", async ({ page }
   await expect(page).toHaveURL(/\/billing\?plan=A2$/);
   await expect(page.getByRole("heading", { name: "Complete A2 checkout" })).toBeVisible();
   await expect(page.getByText("RMB 69-129 / month")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create payment order" })).toBeEnabled();
+  await expect(page.getByRole("radio", { name: "USDT" })).toHaveCount(0);
+  await page.getByRole("radio", { name: "WeChat Pay" }).check();
 
   const checkoutResponse = page.waitForResponse(
     (response) => response.url().includes("/api/billing/checkout") && response.status() === 201
   );
-  await page.getByRole("button", { name: "Create Alipay order" }).click();
+  await page.getByRole("button", { name: "Create payment order" }).click();
   await checkoutResponse;
 
   await expect(page.getByText("Payment order created.")).toBeVisible();
-  await expect(page.getByText("A2 · ALIPAY · RMB 69")).toBeVisible();
+  await expect(page.getByText("A2 · WECHAT_PAY · RMB 69")).toBeVisible();
   await expect(page.getByText("PENDING")).toBeVisible();
 });
 

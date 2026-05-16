@@ -59,6 +59,7 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
   const subscription = await getCurrentSubscription(user.id);
   const currentPlan = getPlanByCode(subscription?.planCode ?? "A0");
   const selectedPlan = getSelectedPlan((await searchParams)?.plan);
+  const cryptoEnabled = process.env.ENABLE_CRYPTO_PAYMENTS === "true";
   const orders = await listPaymentOrders({
     ownerType: OwnerType.USER,
     ownerId: user.id
@@ -114,7 +115,11 @@ export default async function BillingPage({ searchParams }: BillingPageProps) {
 
           <div className="space-y-4">
             {selectedPlan ? (
-              <CheckoutPanel planCode={selectedPlan.code as PlanCode} priceLabel={selectedPlan.priceLabel} />
+              <CheckoutPanel
+                planCode={selectedPlan.code as PlanCode}
+                priceLabel={selectedPlan.priceLabel}
+                cryptoEnabled={cryptoEnabled}
+              />
             ) : (
               <div className="rounded-md border border-line bg-white p-5">
                 <h2 className="text-base font-semibold">Self-serve checkout</h2>

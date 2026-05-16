@@ -113,6 +113,28 @@ describe("payment checkout", () => {
     expect(client.rows.map((row) => row.amountCents)).toEqual([1900, 6900, 19900, 29900]);
   });
 
+  it("creates domestic WeChat Pay orders for self-serve checkout", async () => {
+    const client = createPaymentClient();
+
+    await expect(
+      createCheckoutOrder(
+        {
+          ownerType: OwnerType.USER,
+          ownerId: "user-1",
+          planCode: PlanCode.A2,
+          method: PaymentMethod.WECHAT_PAY
+        },
+        {
+          client
+        }
+      )
+    ).resolves.toMatchObject({
+      status: PaymentStatus.PENDING,
+      method: PaymentMethod.WECHAT_PAY,
+      paymentProvider: "manual-wechat-pay"
+    });
+  });
+
   it("rejects B2 and B3 checkout with an application path", async () => {
     const client = createPaymentClient();
 
@@ -186,5 +208,28 @@ describe("payment checkout", () => {
       code: "CRYPTO_DISABLED"
     } satisfies Partial<PaymentError>);
     expect(client.rows).toHaveLength(0);
+  });
+
+  it("creates manual-review USDT orders when crypto payments are enabled", async () => {
+    const client = createPaymentClient();
+
+    await expect(
+      createCheckoutOrder(
+        {
+          ownerType: OwnerType.USER,
+          ownerId: "user-1",
+          planCode: PlanCode.A2,
+          method: PaymentMethod.CRYPTO_USDT
+        },
+        {
+          client,
+          cryptoEnabled: true
+        }
+      )
+    ).resolves.toMatchObject({
+      status: PaymentStatus.PENDING,
+      method: PaymentMethod.CRYPTO_USDT,
+      paymentProvider: "crypto-usdt-manual-review"
+    });
   });
 });
