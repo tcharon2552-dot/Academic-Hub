@@ -1,12 +1,15 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export function RegisterForm() {
-  const router = useRouter();
+  const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    setIsReady(true);
+  }, []);
 
   return (
     <form
@@ -32,11 +35,11 @@ export function RegisterForm() {
 
         if (!response.ok) {
           const body = (await response.json().catch(() => null)) as { error?: string } | null;
-          setError(body?.error ?? "Registration failed.");
+          setError(body?.error ?? "Access failed.");
           return;
         }
 
-        router.refresh();
+        window.location.assign("/dashboard");
       }}
     >
       <label className="grid gap-2 text-sm font-medium text-ink">
@@ -60,10 +63,10 @@ export function RegisterForm() {
       {error ? <p className="text-sm font-medium text-red-700">{error}</p> : null}
       <button
         type="submit"
-        disabled={isSubmitting}
+        disabled={!isReady || isSubmitting}
         className="min-h-11 rounded-md bg-ink px-4 py-2 text-sm font-semibold text-white transition hover:bg-moss focus:outline-none focus:ring-2 focus:ring-moss focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-ink/60"
       >
-        {isSubmitting ? "Creating account" : "Create account"}
+        {isSubmitting ? "Continuing" : "Continue"}
       </button>
     </form>
   );

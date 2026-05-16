@@ -32,10 +32,10 @@ function RegistrationPanel() {
           Academic Hub
         </Link>
         <div className="rounded-md border border-line bg-white p-6">
-          <p className="text-sm font-semibold uppercase tracking-wide text-moss">Developer registration</p>
-          <h1 className="mt-3 text-3xl font-semibold">Start with A0 research credits</h1>
+          <p className="text-sm font-semibold uppercase tracking-wide text-moss">Research account</p>
+          <h1 className="mt-3 text-3xl font-semibold">Access your research workspace</h1>
           <p className="mt-4 text-sm leading-6 text-ink/70">
-            Create a development account to activate free signup quota and open the research workspace.
+            Continue with email to open your workspace. New accounts receive A0 free research credits.
           </p>
           <RegisterForm />
         </div>
@@ -77,6 +77,14 @@ export default async function DashboardPage() {
             >
               Pricing
             </Link>
+            <form action="/api/auth/logout" method="post">
+              <button
+                type="submit"
+                className="rounded-md px-3 py-2 text-sm font-medium text-moss transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-moss"
+              >
+                Sign out
+              </button>
+            </form>
           </nav>
         </header>
 

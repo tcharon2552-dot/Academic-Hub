@@ -1,8 +1,7 @@
 "use client";
 
 import { PaymentMethod, type PlanCode } from "@prisma/client";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type CheckoutPanelProps = {
   planCode: PlanCode;
@@ -21,10 +20,15 @@ type CheckoutResponse = {
 };
 
 export function CheckoutPanel({ planCode, priceLabel }: CheckoutPanelProps) {
-  const router = useRouter();
+  const [isReady, setIsReady] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [createdOrder, setCreatedOrder] = useState<CheckoutResponse["order"] | null>(null);
+
+  useEffect(() => {
+    setIsReady(true);
+  }, []);
 
   return (
     <section className="rounded-md border border-line bg-white p-5">
@@ -37,11 +41,12 @@ export function CheckoutPanel({ planCode, priceLabel }: CheckoutPanelProps) {
       </p>
       <button
         type="button"
-        disabled={isSubmitting}
+        disabled={!isReady || isSubmitting}
         className="mt-5 inline-flex min-h-11 items-center justify-center rounded-md bg-ink px-4 py-2 text-sm font-semibold text-white transition hover:bg-moss focus:outline-none focus:ring-2 focus:ring-moss focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-ink/60"
         onClick={async () => {
           setMessage(null);
           setError(null);
+          setCreatedOrder(null);
           setIsSubmitting(true);
 
           const response = await fetch("/api/billing/checkout", {
@@ -62,14 +67,27 @@ export function CheckoutPanel({ planCode, priceLabel }: CheckoutPanelProps) {
             return;
           }
 
-          setMessage("Payment order created.");
-          router.refresh();
+          if (body?.order) {
+            setCreatedOrder(body.order);
+            setMessage("Payment order created.");
+          } else {
+            setError("Checkout failed.");
+          }
         }}
       >
         {isSubmitting ? "Creating order" : "Create Alipay order"}
       </button>
       {message ? <p className="mt-4 rounded-md bg-paper px-3 py-2 text-sm font-medium text-ink">{message}</p> : null}
       {error ? <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</p> : null}
+      {createdOrder ? (
+        <div className="mt-4 rounded-md border border-line bg-paper px-3 py-2">
+          <p className="text-sm font-medium text-ink">
+            {createdOrder.planCode} · {createdOrder.method} · RMB{" "}
+            {(createdOrder.amountCents / 100).toLocaleString("en-US")}
+          </p>
+          <p className="mt-1 text-xs font-semibold text-moss">{createdOrder.status}</p>
+        </div>
+      ) : null}
     </section>
   );
 }

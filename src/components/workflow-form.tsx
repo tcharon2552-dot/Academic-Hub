@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type WorkflowField = {
   name: string;
@@ -49,9 +49,14 @@ function buildRequestBody(values: Record<string, string>, mode: WorkflowFormProp
 }
 
 export function WorkflowForm({ endpoint, submitLabel, fields, mode = "default" }: WorkflowFormProps) {
+  const [isReady, setIsReady] = useState(false);
   const [output, setOutput] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    setIsReady(true);
+  }, []);
 
   return (
     <form
@@ -106,7 +111,7 @@ export function WorkflowForm({ endpoint, submitLabel, fields, mode = "default" }
       {error ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
       <button
         type="submit"
-        disabled={isSubmitting}
+        disabled={!isReady || isSubmitting}
         className="min-h-11 rounded-md bg-ink px-4 py-2 text-sm font-semibold text-white transition hover:bg-moss focus:outline-none focus:ring-2 focus:ring-moss focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-ink/60"
       >
         {isSubmitting ? "Running workflow" : submitLabel}
