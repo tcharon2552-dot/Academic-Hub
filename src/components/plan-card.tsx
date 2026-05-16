@@ -5,6 +5,14 @@ type PlanCardProps = {
   plan: PlanCatalogItem;
 };
 
+function getPlanCtaHref(plan: PlanCatalogItem) {
+  if (plan.accessMode === "self-serve") {
+    return `/billing?plan=${plan.code}`;
+  }
+
+  return plan.ctaHref;
+}
+
 export function PlanCard({ plan }: PlanCardProps) {
   const accessLabel =
     plan.accessMode === "application"
@@ -56,7 +64,7 @@ export function PlanCard({ plan }: PlanCardProps) {
       </ul>
 
       <Link
-        href={plan.ctaHref}
+        href={getPlanCtaHref(plan)}
         className="mt-auto inline-flex min-h-10 items-center justify-center rounded-md bg-ink px-4 py-2 text-sm font-semibold text-white transition hover:bg-moss focus:outline-none focus:ring-2 focus:ring-moss focus:ring-offset-2"
       >
         {plan.ctaLabel}

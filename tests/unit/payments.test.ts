@@ -3,6 +3,7 @@ import { OwnerType, PaymentMethod, PaymentStatus, PlanCode } from "@prisma/clien
 import {
   PaymentError,
   createCheckoutOrder,
+  listPaymentOrders,
   type PaymentClient,
   type PaymentOrderResult
 } from "../../src/lib/payments";
@@ -41,6 +42,49 @@ function createPaymentClient(rows: PaymentOrderRow[] = []): PaymentClient & { ro
 }
 
 describe("payment checkout", () => {
+  it("stores self-serve checkout orders in E2E mode without a database", async () => {
+    const previousMode = process.env.ACADEMIC_HUB_E2E_MODE;
+    process.env.ACADEMIC_HUB_E2E_MODE = "true";
+
+    try {
+      await expect(
+        createCheckoutOrder({
+          ownerType: OwnerType.USER,
+          ownerId: "e2e:buyer@example.com",
+          userId: "e2e:buyer@example.com",
+          planCode: PlanCode.A2,
+          method: PaymentMethod.ALIPAY
+        })
+      ).resolves.toMatchObject({
+        id: "e2e-payment-order-1",
+        ownerId: "e2e:buyer@example.com",
+        planCode: PlanCode.A2,
+        method: PaymentMethod.ALIPAY,
+        status: PaymentStatus.PENDING,
+        amountCents: 6900
+      });
+
+      await expect(
+        listPaymentOrders({
+          ownerType: OwnerType.USER,
+          ownerId: "e2e:buyer@example.com"
+        })
+      ).resolves.toEqual([
+        expect.objectContaining({
+          id: "e2e-payment-order-1",
+          planCode: PlanCode.A2,
+          method: PaymentMethod.ALIPAY
+        })
+      ]);
+    } finally {
+      if (previousMode === undefined) {
+        delete process.env.ACADEMIC_HUB_E2E_MODE;
+      } else {
+        process.env.ACADEMIC_HUB_E2E_MODE = previousMode;
+      }
+    }
+  });
+
   it("creates self-serve checkout orders for A1, A2, A3, and B1", async () => {
     const client = createPaymentClient();
 

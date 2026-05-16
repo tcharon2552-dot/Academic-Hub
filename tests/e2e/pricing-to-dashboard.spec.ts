@@ -31,3 +31,26 @@ test("visitor can move from pricing to dashboard and writing polish", async ({ p
   await expect(page).toHaveURL(/\/workflows\/writing-polish$/);
   await expect(page.getByRole("heading", { name: "Academic paragraph editing" })).toBeVisible();
 });
+
+test("registered user can create a self-serve A2 payment order", async ({ page }) => {
+  await page.goto("/dashboard");
+  await page.getByLabel("Email").fill(`buyer-${Date.now()}@example.com`);
+  await page.getByLabel("Name").fill("E2E Buyer");
+  await page.getByRole("button", { name: "Create account" }).click();
+
+  await expect(page.getByRole("heading", { name: "Research workspace" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Manage plan" }).click();
+  await expect(page).toHaveURL(/\/pricing$/);
+  await page.getByRole("link", { name: "Choose A2" }).click();
+
+  await expect(page).toHaveURL(/\/billing\?plan=A2$/);
+  await expect(page.getByRole("heading", { name: "Complete A2 checkout" })).toBeVisible();
+  await expect(page.getByText("RMB 69-129 / month")).toBeVisible();
+
+  await page.getByRole("button", { name: "Create Alipay order" }).click();
+
+  await expect(page.getByText("Payment order created.")).toBeVisible();
+  await expect(page.getByText("A2 · ALIPAY · RMB 69")).toBeVisible();
+  await expect(page.getByText("PENDING")).toBeVisible();
+});

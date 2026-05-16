@@ -1,5 +1,6 @@
 import { OwnerType, PaymentMethod, PaymentStatus, PlanCode, type Prisma } from "@prisma/client";
 import { db } from "./db";
+import { isE2eMode } from "./e2e-mode";
 import { getPlanByCode } from "./plans";
 import { checkoutInputSchema, type CheckoutInput } from "./validators/billing";
 
@@ -118,6 +119,58 @@ const prismaPaymentClient: PaymentClient = {
   }
 };
 
+const e2ePaymentRows: PaymentOrderResult[] = [];
+
+const e2ePaymentClient: PaymentClient = {
+  paymentOrder: {
+    create: async ({ data }) => {
+      const order = {
+        id: `e2e-payment-order-${e2ePaymentRows.length + 1}`,
+        userId: data.userId ?? null,
+        teamId: data.teamId ?? null,
+        ownerType: data.ownerType,
+        ownerId: data.ownerId,
+        ownerLabel: data.ownerLabel ?? null,
+        planCode: data.planCode ?? null,
+        method: data.method,
+        status: data.status ?? PaymentStatus.PENDING,
+        amountCents: data.amountCents,
+        currency: data.currency ?? "RMB",
+        paymentProvider: data.paymentProvider ?? null,
+        providerOrderId: data.providerOrderId ?? null,
+        metadata: data.metadata ?? null
+      } satisfies PaymentOrderResult;
+      e2ePaymentRows.unshift(order);
+      return order;
+    },
+    findMany: async (args) => {
+      const ownerType = args?.where?.ownerType;
+      const ownerId = args?.where?.ownerId;
+      const rows = e2ePaymentRows.filter((order) => {
+        if (ownerType && order.ownerType !== ownerType) {
+          return false;
+        }
+
+        if (ownerId && order.ownerId !== ownerId) {
+          return false;
+        }
+
+        return true;
+      });
+
+      return typeof args?.take === "number" ? rows.slice(0, args.take) : rows;
+    }
+  }
+};
+
+function getPaymentClient(client?: PaymentClient) {
+  if (client) {
+    return client;
+  }
+
+  return isE2eMode() ? e2ePaymentClient : prismaPaymentClient;
+}
+
 function resolveAmountCents(planCode: PlanCode) {
   const plan = getPlanByCode(planCode);
   return plan.pricing.monthlyPriceMin * 100;
@@ -174,7 +227,7 @@ export async function createCheckoutOrder(
   const cryptoEnabled = options.cryptoEnabled ?? process.env.ENABLE_CRYPTO_PAYMENTS === "true";
   const provider = resolveProvider(parsed.method, cryptoEnabled);
   const payment = await provider.createPayment(parsed);
-  const client = options.client ?? prismaPaymentClient;
+  const client = getPaymentClient(options.client);
 
   return client.paymentOrder.create({
     data: {
@@ -203,7 +256,7 @@ export async function listPaymentOrders(
     take?: number;
   }
 ) {
-  const client = input.client ?? prismaPaymentClient;
+  const client = getPaymentClient(input.client);
 
   return client.paymentOrder.findMany({
     where: {

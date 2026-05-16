@@ -1,5 +1,6 @@
-import { OwnerType } from "@prisma/client";
+import { OwnerType, PlanCode } from "@prisma/client";
 import Link from "next/link";
+import { CheckoutPanel } from "@/components/checkout-panel";
 import { getCurrentSubscription, getCurrentUser } from "@/lib/auth";
 import { getPlanByCode } from "@/lib/plans";
 import { listPaymentOrders } from "@/lib/payments";
@@ -12,7 +13,26 @@ const addOns = [
   "Advanced model pack"
 ];
 
-export default async function BillingPage() {
+const selfServeCheckoutPlans = new Set<PlanCode>([PlanCode.A1, PlanCode.A2, PlanCode.A3, PlanCode.B1]);
+
+function getSelectedPlan(plan?: string | string[]) {
+  const code = Array.isArray(plan) ? plan[0] : plan;
+
+  if (!code || !(code in PlanCode)) {
+    return null;
+  }
+
+  const planCode = PlanCode[code as keyof typeof PlanCode];
+  return selfServeCheckoutPlans.has(planCode) ? getPlanByCode(planCode) : null;
+}
+
+type BillingPageProps = {
+  searchParams?: Promise<{
+    plan?: string | string[];
+  }>;
+};
+
+export default async function BillingPage({ searchParams }: BillingPageProps) {
   const user = await getCurrentUser();
 
   if (!user) {
@@ -38,6 +58,7 @@ export default async function BillingPage() {
 
   const subscription = await getCurrentSubscription(user.id);
   const currentPlan = getPlanByCode(subscription?.planCode ?? "A0");
+  const selectedPlan = getSelectedPlan((await searchParams)?.plan);
   const orders = await listPaymentOrders({
     ownerType: OwnerType.USER,
     ownerId: user.id
@@ -92,16 +113,20 @@ export default async function BillingPage() {
           </div>
 
           <div className="space-y-4">
-            <div className="rounded-md border border-line bg-white p-5">
-              <h2 className="text-base font-semibold">Self-serve checkout</h2>
-              <p className="mt-4 text-sm leading-6 text-ink/70">Use the checkout API for A1/A2/A3/B1 orders.</p>
-              <Link
-                href="/pricing"
-                className="mt-4 inline-flex min-h-10 items-center justify-center rounded-md bg-ink px-4 py-2 text-sm font-semibold text-white"
-              >
-                Choose plan
-              </Link>
-            </div>
+            {selectedPlan ? (
+              <CheckoutPanel planCode={selectedPlan.code as PlanCode} priceLabel={selectedPlan.priceLabel} />
+            ) : (
+              <div className="rounded-md border border-line bg-white p-5">
+                <h2 className="text-base font-semibold">Self-serve checkout</h2>
+                <p className="mt-4 text-sm leading-6 text-ink/70">Use pricing to choose an A1/A2/A3/B1 plan.</p>
+                <Link
+                  href="/pricing"
+                  className="mt-4 inline-flex min-h-10 items-center justify-center rounded-md bg-ink px-4 py-2 text-sm font-semibold text-white"
+                >
+                  Choose plan
+                </Link>
+              </div>
+            )}
             <div className="rounded-md border border-line bg-white p-5">
               <h2 className="text-base font-semibold">Add-on packages</h2>
               <ul className="mt-3 space-y-2 text-sm text-ink/70">
