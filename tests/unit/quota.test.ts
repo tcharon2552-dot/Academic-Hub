@@ -171,6 +171,24 @@ function createQuotaClient(rows: LedgerRow[] = []): TestQuotaClient {
 }
 
 describe("quota ledger", () => {
+  it("returns deterministic A0 balances in E2E mode without a database", async () => {
+    const previousMode = process.env.ACADEMIC_HUB_E2E_MODE;
+    process.env.ACADEMIC_HUB_E2E_MODE = "true";
+
+    try {
+      await expect(getQuotaBalance("e2e:researcher@example.com", QUOTA_TYPES.researchTask)).resolves.toBe(30);
+      await expect(getQuotaBalance("e2e:researcher@example.com", QUOTA_TYPES.paperReading)).resolves.toBe(5);
+      await expect(getQuotaBalance("e2e:researcher@example.com", QUOTA_TYPES.advancedModel)).resolves.toBe(2);
+      await expect(getQuotaBalance("e2e:researcher@example.com", QUOTA_TYPES.longDocument)).resolves.toBe(0);
+    } finally {
+      if (previousMode === undefined) {
+        delete process.env.ACADEMIC_HUB_E2E_MODE;
+      } else {
+        process.env.ACADEMIC_HUB_E2E_MODE = previousMode;
+      }
+    }
+  });
+
   it("grants A0 signup credits", async () => {
     const client = createQuotaClient();
 

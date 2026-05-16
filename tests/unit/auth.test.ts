@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { UserRole } from "@prisma/client";
-import { AuthError, requireAdminUser, type AuthClient } from "../../src/lib/auth";
+import { PlanCode, SubscriptionStatus, UserRole } from "@prisma/client";
+import {
+  AuthError,
+  createE2eAuthClient,
+  createDevSessionToken,
+  requireAdminUser,
+  type AuthClient
+} from "../../src/lib/auth";
 
 function createAuthClient(role: UserRole): AuthClient {
   return {
@@ -51,6 +57,51 @@ describe("admin auth guard", () => {
       requireAdminUser({
         client: createAuthClient(UserRole.USER),
         sessionToken: "dev:user-1"
+      })
+    ).rejects.toBeInstanceOf(AuthError);
+  });
+});
+
+describe("E2E auth client", () => {
+  it("registers deterministic A0 users without a database", async () => {
+    const client = createE2eAuthClient({
+      email: "researcher@example.com",
+      name: "Researcher"
+    });
+    const sessionToken = createDevSessionToken("e2e:researcher@example.com");
+
+    await expect(
+      client.user.findUnique({
+        where: {
+          id: "e2e:researcher@example.com"
+        }
+      })
+    ).resolves.toMatchObject({
+      id: "e2e:researcher@example.com",
+      email: "researcher@example.com",
+      name: "Researcher",
+      role: UserRole.USER
+    });
+
+    await expect(
+      client.subscription.findUnique({
+        where: {
+          ownerType_ownerId: {
+            ownerType: "USER",
+            ownerId: "e2e:researcher@example.com"
+          }
+        }
+      })
+    ).resolves.toMatchObject({
+      ownerId: "e2e:researcher@example.com",
+      planCode: PlanCode.A0,
+      status: SubscriptionStatus.ACTIVE
+    });
+
+    await expect(
+      requireAdminUser({
+        client,
+        sessionToken
       })
     ).rejects.toBeInstanceOf(AuthError);
   });

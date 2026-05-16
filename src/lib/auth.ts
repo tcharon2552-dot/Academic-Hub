@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { OwnerType, PlanCode, SubscriptionStatus, UserRole, type Prisma, type User } from "@prisma/client";
 import { db } from "./db";
+import { isE2eMode } from "./e2e-mode";
 import { grantSignupCredits, type QuotaClient } from "./quota";
 
 export const SESSION_COOKIE_NAME = "academic_hub_session";
@@ -85,6 +86,11 @@ type RegisterUserOptions = {
   now?: () => Date;
 };
 
+type E2eUserInput = {
+  email: string;
+  name?: string | null;
+};
+
 export class AuthError extends Error {
   constructor(message: string) {
     super(message);
@@ -125,6 +131,45 @@ export function readUserIdFromSessionToken(token: string | undefined) {
   return userId || null;
 }
 
+function createE2eUserId(email: string) {
+  return `e2e:${normalizeEmail(email)}`;
+}
+
+export function createE2eAuthClient(input: E2eUserInput): AuthClient {
+  const email = normalizeEmail(input.email);
+  const name = normalizeName(input.name);
+  const userId = createE2eUserId(email);
+  const e2eUser: RegisteredUser = {
+    id: userId,
+    email,
+    name,
+    role: UserRole.USER
+  };
+  const e2eSubscription: SubscriptionResult = {
+    id: `subscription:${userId}`,
+    ownerType: OwnerType.USER,
+    ownerId: userId,
+    planCode: PlanCode.A0,
+    status: SubscriptionStatus.ACTIVE,
+    currentPeriodStart: new Date("2026-01-01T00:00:00.000Z"),
+    currentPeriodEnd: null
+  };
+
+  return {
+    user: {
+      upsert: async () => e2eUser,
+      findUnique: async ({ where }) => (where.id === userId ? e2eUser : null)
+    },
+    subscription: {
+      upsert: async () => e2eSubscription,
+      findUnique: async ({ where }) => {
+        const owner = where.ownerType_ownerId;
+        return owner?.ownerType === OwnerType.USER && owner.ownerId === userId ? e2eSubscription : null;
+      }
+    }
+  };
+}
+
 export async function registerUser(input: RegisterUserInput, options: RegisterUserOptions = {}) {
   const email = normalizeEmail(input.email);
 
@@ -133,11 +178,13 @@ export async function registerUser(input: RegisterUserInput, options: RegisterUs
   }
 
   const name = normalizeName(input.name);
+  const e2eClient = isE2eMode() ? createE2eAuthClient({ email, name }) : null;
   const client = options.client ?? prismaAuthClient;
+  const authClient = e2eClient ?? client;
   const quotaClient = options.quotaClient;
   const currentDate = options.now?.() ?? new Date();
 
-  const user = await client.user.upsert({
+  const user = await authClient.user.upsert({
     where: {
       email
     },
@@ -152,7 +199,7 @@ export async function registerUser(input: RegisterUserInput, options: RegisterUs
     }
   });
 
-  const subscription = await client.subscription.upsert({
+  const subscription = await authClient.subscription.upsert({
     where: {
       ownerType_ownerId: {
         ownerType: OwnerType.USER,
@@ -170,9 +217,11 @@ export async function registerUser(input: RegisterUserInput, options: RegisterUs
     }
   });
 
-  await grantSignupCredits(user.id, {
-    client: quotaClient
-  });
+  if (!e2eClient) {
+    await grantSignupCredits(user.id, {
+      client: quotaClient
+    });
+  }
 
   return {
     user,
@@ -182,13 +231,23 @@ export async function registerUser(input: RegisterUserInput, options: RegisterUs
 }
 
 export async function getCurrentUser(options: { client?: AuthClient; sessionToken?: string } = {}) {
-  const client = options.client ?? prismaAuthClient;
   const sessionToken = options.sessionToken ?? (await cookies()).get(SESSION_COOKIE_NAME)?.value;
   const userId = readUserIdFromSessionToken(sessionToken);
 
   if (!userId) {
     return null;
   }
+
+  if (isE2eMode() && userId.startsWith("e2e:")) {
+    const email = userId.slice("e2e:".length);
+    return createE2eAuthClient({ email }).user.findUnique({
+      where: {
+        id: userId
+      }
+    });
+  }
+
+  const client = options.client ?? prismaAuthClient;
 
   return client.user.findUnique({
     where: {
@@ -203,6 +262,18 @@ export async function getCurrentSubscription(
     client?: AuthClient;
   } = {}
 ) {
+  if (isE2eMode() && ownerId.startsWith("e2e:")) {
+    const email = ownerId.slice("e2e:".length);
+    return createE2eAuthClient({ email }).subscription.findUnique({
+      where: {
+        ownerType_ownerId: {
+          ownerType: OwnerType.USER,
+          ownerId
+        }
+      }
+    });
+  }
+
   const client = options.client ?? prismaAuthClient;
 
   return client.subscription.findUnique({

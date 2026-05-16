@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { db } from "./db";
+import { getE2eQuotaBalance, isE2eMode } from "./e2e-mode";
 import { PLAN_CATALOG } from "./plans";
 
 export const QUOTA_TYPES = {
@@ -123,6 +124,10 @@ export async function getQuotaBalance(
   quotaType: QuotaType,
   options: QuotaOptions = {}
 ) {
+  if (!options.client && options.ownerType === undefined && isE2eMode() && ownerId.startsWith("e2e:")) {
+    return getE2eQuotaBalance(quotaType);
+  }
+
   return getBalance(options.client ?? prismaQuotaClient, ownerId, quotaType, options.ownerType ?? "USER");
 }
 
