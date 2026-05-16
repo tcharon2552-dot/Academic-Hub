@@ -19,6 +19,12 @@ Core MVP workflows:
 
 ## Local Development
 
+Prerequisites:
+
+- Node.js 20+
+- pnpm via Corepack
+- Docker, if you want the included local PostgreSQL service
+
 Install dependencies:
 
 ```bash
@@ -30,6 +36,20 @@ Create a local environment file:
 
 ```bash
 cp .env.example .env
+```
+
+Start local PostgreSQL:
+
+```bash
+docker compose up -d db
+```
+
+Prepare the database:
+
+```bash
+pnpm prisma:generate
+pnpm prisma:migrate
+pnpm prisma:seed
 ```
 
 Run the app:
@@ -66,6 +86,8 @@ pnpm prisma:seed
 
 The seed script syncs the A0/A1/A2/A3/B1/B2/B3 plan catalog into the `Plan` table.
 
+If port `5432` is already used, change the host port in `docker-compose.yml` and update `DATABASE_URL` in `.env`.
+
 ## Test Commands
 
 Run type checks:
@@ -86,6 +108,8 @@ Run the Playwright conversion flow:
 pnpm test:e2e
 ```
 
+The E2E command starts Next.js on `127.0.0.1:3100` with `ACADEMIC_HUB_E2E_MODE=true`. It does not require PostgreSQL or a real New API key.
+
 Run a production build:
 
 ```bash
@@ -105,3 +129,24 @@ DATABASE_URL=postgresql://academic_hub:academic_hub@localhost:5432/academic_hub 
 - Create at least one admin user directly in the database before exposing `/admin`.
 - Launch with domestic payment methods first. Crypto payment must remain disabled unless legal, accounting, and operational controls are approved.
 - Monitor quota consumption, workflow errors, payment order status, and heavy usage owners from day one.
+
+Minimum production environment:
+
+```bash
+DATABASE_URL=postgresql://...
+NEW_API_BASE_URL=https://your-new-api.example.com
+NEW_API_KEY=...
+APP_BASE_URL=https://your-domain.example.com
+ENABLE_CRYPTO_PAYMENTS=false
+```
+
+Minimum release sequence:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm prisma:generate
+pnpm prisma:migrate
+pnpm prisma:seed
+pnpm build
+pnpm start
+```
