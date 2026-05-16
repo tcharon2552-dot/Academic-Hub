@@ -1,7 +1,13 @@
 import { WorkflowType } from "@prisma/client";
 import { QUOTA_TYPES } from "../quota";
 import { writingPolishInputSchema, type WritingPolishInput } from "../validators/workflows";
-import { DEFAULT_RESEARCH_MODEL, prismaWorkflowClient, runQuotaBackedWorkflow, summarize, type WorkflowOptions } from "./shared";
+import {
+  DEFAULT_RESEARCH_MODEL,
+  getDefaultWorkflowClient,
+  runQuotaBackedWorkflow,
+  summarize,
+  type WorkflowOptions
+} from "./shared";
 
 export async function runWritingPolishWorkflow(input: WritingPolishInput, options: WorkflowOptions = {}) {
   const parsed = writingPolishInputSchema.parse(input);
@@ -9,7 +15,7 @@ export async function runWritingPolishWorkflow(input: WritingPolishInput, option
   const goal = parsed.goal ? `\nUser goal: ${parsed.goal}` : "";
 
   return runQuotaBackedWorkflow({
-    client: options.client ?? prismaWorkflowClient,
+    client: options.client ?? getDefaultWorkflowClient(),
     quotaClient: options.quotaClient,
     modelCaller: options.modelCaller,
     userId: parsed.userId,

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getCurrentSubscription, getCurrentUser } from "@/lib/auth";
 import { getPlanByCode } from "@/lib/plans";
 import { getQuotaBalance, QUOTA_TYPES } from "@/lib/quota";
+import { listRecentWorkflowRuns } from "@/lib/workflows/shared";
 import { QuotaMeter } from "@/components/quota-meter";
 import { RegisterForm } from "@/components/register-form";
 
@@ -57,6 +58,9 @@ export default async function DashboardPage() {
     getQuotaBalance(user.id, QUOTA_TYPES.advancedModel),
     getQuotaBalance(user.id, QUOTA_TYPES.longDocument)
   ]);
+  const recentWorkflowRuns = await listRecentWorkflowRuns(user.id, {
+    take: 5
+  });
   const lowQuota = researchTaskCredits < 10 || advancedModelCredits < 2;
 
   return (
@@ -134,6 +138,28 @@ export default async function DashboardPage() {
               </Link>
             ))}
           </section>
+        </section>
+
+        <section aria-labelledby="recent-workflows-heading" className="mt-8 rounded-md border border-line bg-white p-5">
+          <h2 id="recent-workflows-heading" className="text-base font-semibold">
+            Recent workflow runs
+          </h2>
+          <div className="mt-4 space-y-3">
+            {recentWorkflowRuns.length === 0 ? (
+              <p className="text-sm text-ink/60">No workflow runs yet.</p>
+            ) : (
+              recentWorkflowRuns.map((run) => (
+                <div key={run.id} className="border-b border-line pb-3 last:border-b-0 last:pb-0">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm font-medium text-ink">{run.type}</p>
+                    <p className="text-xs font-semibold text-moss">{run.status}</p>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-ink/70">{run.inputSummary}</p>
+                  {run.outputSummary ? <p className="mt-1 text-xs text-ink/55">{run.outputSummary}</p> : null}
+                </div>
+              ))
+            )}
+          </div>
         </section>
       </section>
     </main>

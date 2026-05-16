@@ -4,8 +4,8 @@ import { literatureReviewInputSchema, type LiteratureReviewInput } from "../vali
 import {
   DEFAULT_RESEARCH_MODEL,
   WorkflowError,
+  getDefaultWorkflowClient,
   getPlanCodeForUser,
-  prismaWorkflowClient,
   runQuotaBackedWorkflow,
   summarize,
   type WorkflowOptions
@@ -15,7 +15,7 @@ const disallowedPlans = new Set<PlanCode>([PlanCode.A0, PlanCode.A1]);
 
 export async function runLiteratureReviewWorkflow(input: LiteratureReviewInput, options: WorkflowOptions = {}) {
   const parsed = literatureReviewInputSchema.parse(input);
-  const client = options.client ?? prismaWorkflowClient;
+  const client = options.client ?? getDefaultWorkflowClient();
   const planCode = await getPlanCodeForUser(client, parsed.userId);
 
   if (disallowedPlans.has(planCode)) {

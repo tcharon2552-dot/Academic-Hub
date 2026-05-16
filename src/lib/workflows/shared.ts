@@ -1,5 +1,6 @@
 import { OwnerType, PlanCode, WorkflowRunStatus, WorkflowType, type Prisma } from "@prisma/client";
 import { db } from "../db";
+import { isE2eMode } from "../e2e-mode";
 import { callResearchModel, type NormalizedUsage, type ResearchModelInput } from "../new-api";
 import { consumeQuota, getQuotaBalance, type QuotaClient, type QuotaType } from "../quota";
 
@@ -21,6 +22,16 @@ type WorkflowRunResult = {
   inputSummary: string;
   outputSummary: string | null;
   metadata?: Prisma.JsonValue | Prisma.InputJsonValue | null;
+};
+
+type WorkflowRunFindManyArgs = {
+  where: {
+    userId: string;
+  };
+  orderBy?: {
+    createdAt: "asc" | "desc";
+  };
+  take?: number;
 };
 
 type WorkflowRunCreateArgs = {
@@ -76,6 +87,7 @@ export type WorkflowClient = {
     }): Promise<SubscriptionResult | null>;
   };
   workflowRun: {
+    findMany(args: WorkflowRunFindManyArgs): Promise<WorkflowRunResult[]>;
     create(args: WorkflowRunCreateArgs): Promise<WorkflowRunResult>;
     update(args: WorkflowRunUpdateArgs): Promise<WorkflowRunResult>;
   };
@@ -119,6 +131,7 @@ export const prismaWorkflowClient: WorkflowClient = {
     findUnique: (args) => db.subscription.findUnique(args as Prisma.SubscriptionFindUniqueArgs)
   },
   workflowRun: {
+    findMany: (args) => db.workflowRun.findMany(args as Prisma.WorkflowRunFindManyArgs),
     create: (args) => db.workflowRun.create(args as Prisma.WorkflowRunCreateArgs),
     update: (args) => db.workflowRun.update(args as Prisma.WorkflowRunUpdateArgs)
   },
@@ -126,6 +139,104 @@ export const prismaWorkflowClient: WorkflowClient = {
     create: (args) => db.usageRecord.create(args as Prisma.UsageRecordCreateArgs)
   }
 };
+
+const e2eWorkflowRuns: WorkflowRunResult[] = [];
+const e2eUsageRecords: unknown[] = [];
+
+export const e2eWorkflowClient: WorkflowClient = {
+  subscription: {
+    findUnique: async ({ where }) => ({
+      id: `subscription:${where.ownerType_ownerId?.ownerId ?? "e2e"}`,
+      ownerType: OwnerType.USER,
+      ownerId: where.ownerType_ownerId?.ownerId ?? "e2e",
+      planCode: PlanCode.A2,
+      status: "ACTIVE"
+    })
+  },
+  workflowRun: {
+    findMany: async ({ where, take }) => {
+      const rows = e2eWorkflowRuns.filter((run) => run.userId === where.userId);
+      return typeof take === "number" ? rows.slice(0, take) : rows;
+    },
+    create: async ({ data }) => {
+      const run = {
+        id: `e2e-workflow-run-${e2eWorkflowRuns.length + 1}`,
+        type: data.type,
+        status: data.status ?? WorkflowRunStatus.PENDING,
+        userId: data.userId,
+        teamId: data.teamId ?? null,
+        documentId: data.documentId ?? null,
+        inputSummary: data.inputSummary,
+        outputSummary: data.outputSummary ?? null,
+        metadata: data.metadata
+      } satisfies WorkflowRunResult;
+      e2eWorkflowRuns.unshift(run);
+      return run;
+    },
+    update: async ({ where, data }) => {
+      const run = e2eWorkflowRuns.find((item) => item.id === where.id);
+
+      if (!run) {
+        throw new WorkflowError(`Workflow run not found: ${where.id}`);
+      }
+
+      if (data.status) {
+        run.status = data.status;
+      }
+
+      if ("outputSummary" in data) {
+        run.outputSummary = data.outputSummary ?? null;
+      }
+
+      if ("metadata" in data) {
+        run.metadata = data.metadata;
+      }
+
+      return run;
+    }
+  },
+  usageRecord: {
+    create: async ({ data }) => {
+      e2eUsageRecords.unshift(data);
+      return data;
+    }
+  }
+};
+
+export const demoResearchModelCaller: ResearchModelCaller = async (input) => ({
+  content: [
+    "Demo polished draft:",
+    "The revised text improves clarity, keeps the research claim cautious, and uses a more academic tone.",
+    "",
+    "Suggested revision:",
+    input.userPrompt
+      .split("\n")
+      .slice(-1)[0]
+      ?.replace(/\bare\b/g, "is")
+      .replace(/\bgood\b/g, "robust") || "The method is presented with clearer academic phrasing."
+  ].join("\n"),
+  rawResponse: {
+    id: "demo-response",
+    provider: "academic-hub-demo"
+  },
+  usage: {
+    promptTokens: 48,
+    completionTokens: 52,
+    totalTokens: 100
+  }
+});
+
+export function getDefaultWorkflowClient() {
+  return isE2eMode() ? e2eWorkflowClient : prismaWorkflowClient;
+}
+
+export function getDefaultModelCaller(modelCaller?: ResearchModelCaller) {
+  if (modelCaller) {
+    return modelCaller;
+  }
+
+  return isE2eMode() ? demoResearchModelCaller : callResearchModel;
+}
 
 export function summarize(value: string, maxLength = 120) {
   const compact = value.replace(/\s+/g, " ").trim();
@@ -143,6 +254,26 @@ export async function getPlanCodeForUser(client: WorkflowClient, userId: string)
   });
 
   return subscription?.planCode ?? PlanCode.A0;
+}
+
+export async function listRecentWorkflowRuns(
+  userId: string,
+  options: {
+    client?: WorkflowClient;
+    take?: number;
+  } = {}
+) {
+  const client = options.client ?? getDefaultWorkflowClient();
+
+  return client.workflowRun.findMany({
+    where: {
+      userId
+    },
+    orderBy: {
+      createdAt: "desc"
+    },
+    take: options.take ?? 5
+  });
 }
 
 export async function runQuotaBackedWorkflow(input: {
@@ -183,7 +314,7 @@ export async function runQuotaBackedWorkflow(input: {
   });
 
   try {
-    const modelResult = await (input.modelCaller ?? callResearchModel)({
+    const modelResult = await getDefaultModelCaller(input.modelCaller)({
       workflowType: input.workflowName,
       model: input.model,
       systemPrompt: input.systemPrompt,

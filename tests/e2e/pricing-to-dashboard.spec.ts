@@ -30,6 +30,16 @@ test("visitor can move from pricing to dashboard and writing polish", async ({ p
   await page.getByRole("link", { name: "Writing polish" }).click();
   await expect(page).toHaveURL(/\/workflows\/writing-polish$/);
   await expect(page.getByRole("heading", { name: "Academic paragraph editing" })).toBeVisible();
+
+  await page.getByLabel("Academic text").fill("This method are good and the result is useful for many tasks.");
+  await page.getByLabel("Editing goal").fill("Make it suitable for a journal submission.");
+  await page.getByRole("button", { name: "Polish writing" }).click();
+  await expect(page.getByLabel("Workflow output")).toContainText("Demo polished draft");
+
+  await page.getByRole("link", { name: "Academic Hub" }).click();
+  await expect(page.getByRole("heading", { name: "Recent workflow runs" })).toBeVisible();
+  await expect(page.getByText("WRITING_POLISH")).toBeVisible();
+  await expect(page.getByText("SUCCEEDED")).toBeVisible();
 });
 
 test("registered user can create a self-serve A2 payment order", async ({ page }) => {

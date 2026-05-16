@@ -189,6 +189,25 @@ describe("quota ledger", () => {
     }
   });
 
+  it("allows deterministic E2E owners to consume quota without a database", async () => {
+    const previousMode = process.env.ACADEMIC_HUB_E2E_MODE;
+    process.env.ACADEMIC_HUB_E2E_MODE = "true";
+
+    try {
+      await expect(
+        consumeQuota("e2e:researcher@example.com", QUOTA_TYPES.researchTask, 1, {
+          workflowRunId: "e2e-workflow-run-1"
+        })
+      ).resolves.toBeUndefined();
+    } finally {
+      if (previousMode === undefined) {
+        delete process.env.ACADEMIC_HUB_E2E_MODE;
+      } else {
+        process.env.ACADEMIC_HUB_E2E_MODE = previousMode;
+      }
+    }
+  });
+
   it("grants A0 signup credits", async () => {
     const client = createQuotaClient();
 

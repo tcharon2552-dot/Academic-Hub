@@ -13,7 +13,12 @@ import { registerUser, type AuthClient } from "../../src/lib/auth";
 import { runLiteratureReviewWorkflow } from "../../src/lib/workflows/literature-review";
 import { runPaperReaderWorkflow } from "../../src/lib/workflows/paper-reader";
 import { runWritingPolishWorkflow } from "../../src/lib/workflows/writing-polish";
-import { WorkflowError, type ResearchModelCaller, type WorkflowClient } from "../../src/lib/workflows/shared";
+import {
+  WorkflowError,
+  listRecentWorkflowRuns,
+  type ResearchModelCaller,
+  type WorkflowClient
+} from "../../src/lib/workflows/shared";
 
 type UserRow = {
   id: string;
@@ -254,6 +259,10 @@ function createWorkflowClient(rows: {
       }
     },
     workflowRun: {
+      findMany: async ({ where, take }) => {
+        const matchingRuns = rows.workflowRuns.filter((run) => run.userId === where.userId);
+        return typeof take === "number" ? matchingRuns.slice(0, take) : matchingRuns;
+      },
       create: async ({ data }) => {
         const run = {
           id: `workflow-run-${rows.workflowRuns.length + 1}`,
@@ -394,6 +403,36 @@ describe("registration workflow", () => {
 });
 
 describe("research workflows", () => {
+  it("runs writing polish in E2E demo mode without a database or New API key", async () => {
+    const previousMode = process.env.ACADEMIC_HUB_E2E_MODE;
+    process.env.ACADEMIC_HUB_E2E_MODE = "true";
+
+    try {
+      const result = await runWritingPolishWorkflow({
+        userId: "e2e:demo@example.com",
+        text: "This method are good and the result is useful.",
+        goal: "Make it suitable for a journal submission."
+      });
+
+      expect(result.output).toContain("Demo polished draft");
+      expect(result.usage.totalTokens).toBeGreaterThan(0);
+
+      await expect(listRecentWorkflowRuns("e2e:demo@example.com")).resolves.toEqual([
+        expect.objectContaining({
+          type: WorkflowType.WRITING_POLISH,
+          status: WorkflowRunStatus.SUCCEEDED,
+          inputSummary: expect.stringContaining("Writing polish")
+        })
+      ]);
+    } finally {
+      if (previousMode === undefined) {
+        delete process.env.ACADEMIC_HUB_E2E_MODE;
+      } else {
+        process.env.ACADEMIC_HUB_E2E_MODE = previousMode;
+      }
+    }
+  });
+
   it("paper reader consumes paper reading quota", async () => {
     const authRows = {
       users: [] as UserRow[],

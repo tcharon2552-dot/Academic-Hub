@@ -214,6 +214,16 @@ export async function consumeQuota(
     throw new QuotaError("Quota consumption amount must be greater than zero.");
   }
 
+  if (!options.client && options.ownerType === undefined && isE2eMode() && ownerId.startsWith("e2e:")) {
+    const currentBalance = getE2eQuotaBalance(quotaType);
+
+    if (currentBalance < amount) {
+      throw new QuotaError(`Insufficient ${quotaType}. Required ${amount}, available ${currentBalance}.`);
+    }
+
+    return;
+  }
+
   const client = options.client ?? prismaQuotaClient;
   const ownerType = options.ownerType ?? "USER";
 
